@@ -20,6 +20,11 @@ bool Connect(const std::string& host, std::uint16_t port) {
 
   // Connect.
   tcp::socket socket{service};
-  asio::connect(socket, address, error_code);
-  return !error_code;
+  asio::async_connect(socket, address, [&](asio::error_code ec, tcp::resolver::iterator) {
+    error_code = ec;
+  });
+
+  asio::error_code service_error_code;
+  service.run(service_error_code);
+  return !error_code && !service_error_code;
 }
