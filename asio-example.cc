@@ -8,7 +8,8 @@
 
 using namespace asio::ip;
 
-bool Connect(const std::string& host, std::uint16_t port, std::uint64_t timeout_millis) {
+bool Connect(const std::string& host, std::uint16_t port,
+             std::uint8_t multiplex_level, std::uint64_t timeout_millis) {
   asio::io_service service;
   asio::error_code error_code;
 
@@ -22,7 +23,8 @@ bool Connect(const std::string& host, std::uint16_t port, std::uint64_t timeout_
 
   tcp::resolver::query query{host, std::to_string(port)};
   tcp::resolver resolver{service};
-  tcp::socket socket{service};
+  std::uint8_t connected_sockets = 0;
+  std::vector<tcp::socket> sockets;
 
   // Resolve host...
   resolver.async_resolve(query, [&](asio::error_code ec, const tcp::resolver::iterator& address) {
@@ -31,10 +33,19 @@ bool Connect(const std::string& host, std::uint16_t port, std::uint64_t timeout_
       service.stop();
     } else {
       // ... and then connect.
-      asio::async_connect(socket, address, [&](asio::error_code ec, tcp::resolver::iterator) {
-        error_code = ec;
-        service.stop();
-      });
+      for (std::uint8_t i = 0; i < multiplex_level; ++i) {
+        sockets.emplace_back(service);
+        asio::async_connect(sockets.back(), address, [&](asio::error_code ec,
+        tcp::resolver::iterator) {
+          if (ec) {
+            error_code = ec;
+            service.stop();
+          } else if (++connected_sockets == multiplex_level) {
+            // All sockets connected.
+            service.stop();
+          }
+        });
+      }
     }
   });
 
